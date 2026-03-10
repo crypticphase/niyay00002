@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "dev": "python3 -m http.server 3000",
+    "start": "python3 -m http.server 3000",
+    "lint": "python3 -m py_compile main.py nexus_god/**/*.py"
+  }
+}
