@@ -47,6 +47,7 @@ class NexusGodWriter:
             sys.exit(1)
             
         self.current_tab = "chat"
+        self.last_selected_chapter = "ตอนที่ 1"
         
         # Themes
         self.themes = {
@@ -204,7 +205,7 @@ class NexusGodWriter:
         elif tab_key == "chat": ChatTab(self.container, self.dm, self.colors, self.build_card, self.ai_service, self.apply_chat_update, self.set_status).build()
         elif tab_key == "chars": CharactersTab(self.container, self.dm, self.colors, self.build_card, self.create_input).build()
         elif tab_key == "editor": 
-            self.editor_tab = EditorTab(self.container, self.dm, self.colors, self.build_card, self.ai_service, self.set_status)
+            self.editor_tab = EditorTab(self.container, self.dm, self.colors, self.build_card, self.ai_service, self.set_status, on_chapter_change_cb=self.update_last_chapter)
             self.editor_tab.build()
         elif tab_key == "wizard": WizardTab(self.container, self.dm, self.colors, self.build_card, self.ai_service, self.apply_chat_update, self.set_status, self.update_progress).build()
         
@@ -213,13 +214,29 @@ class NexusGodWriter:
     def set_status(self, text):
         self.status_label.config(text=text)
 
+    def update_last_chapter(self, name):
+        self.last_selected_chapter = name
+
     def get_editor_content(self):
-        if hasattr(self, 'editor_tab'): return self.editor_tab.editor_text.get("1.0", tk.END).strip()
-        return ""
+        if self.current_tab == "editor":
+            try:
+                if hasattr(self, 'editor_tab') and hasattr(self.editor_tab, 'editor_text') and self.editor_tab.editor_text.winfo_exists():
+                    return self.editor_tab.editor_text.get("1.0", tk.END).strip()
+            except tk.TclError:
+                pass
+        
+        # Fallback to data manager if editor widget is gone or we are in another tab
+        chapter_name = self.get_chapter_name()
+        return self.dm.data.get("chapters", {}).get(chapter_name, "")
 
     def get_chapter_name(self):
-        if hasattr(self, 'editor_tab'): return self.editor_tab.chapter_selector.get()
-        return "Unknown"
+        if self.current_tab == "editor":
+            try:
+                if hasattr(self, 'editor_tab') and hasattr(self.editor_tab, 'chapter_selector') and self.editor_tab.chapter_selector.winfo_exists():
+                    return self.editor_tab.chapter_selector.get()
+            except tk.TclError:
+                pass
+        return getattr(self, 'last_selected_chapter', "ตอนที่ 1")
 
     def apply_chat_update(self, update):
         if "world" in update: self.dm.data["world"].update(update["world"])

@@ -6,13 +6,14 @@ from tkinter import ttk, scrolledtext, messagebox
 from nexus_god.core.logging_utils import log_debug, log_info, log_error
 
 class EditorTab:
-    def __init__(self, parent, dm, colors, build_card, ai_service, set_status):
+    def __init__(self, parent, dm, colors, build_card, ai_service, set_status, on_chapter_change_cb=None):
         self.parent = parent
         self.dm = dm
         self.colors = colors
         self.build_card = build_card
         self.ai_service = ai_service
         self.set_status = set_status
+        self.on_chapter_change_cb = on_chapter_change_cb
         self.is_ai_busy = False
 
     def build(self):
@@ -38,6 +39,10 @@ class EditorTab:
         tk.Button(toolbar, text="+ เพิ่มตอน", command=self.add_chapter, bg=self.colors["sidebar"], fg=self.colors["text"], bd=0, padx=10).pack(side="left", padx=5)
         tk.Button(toolbar, text="💾 บันทึก", command=self.save_current_chapter, bg=self.colors["success"], fg="white", bd=0, padx=15).pack(side="left", padx=5)
         
+        # Undo/Redo Buttons
+        tk.Button(toolbar, text="↩️ เลิกทำ", command=self.undo, bg=self.colors["sidebar"], fg=self.colors["text"], bd=0, padx=10).pack(side="left", padx=2)
+        tk.Button(toolbar, text="↪️ ทำซ้ำ", command=self.redo, bg=self.colors["sidebar"], fg=self.colors["text"], bd=0, padx=10).pack(side="left", padx=2)
+        
         # AI Tools Toolbar
         ai_toolbar = tk.Frame(card, bg=card["bg"])
         ai_toolbar.pack(fill="x", pady=(0, 10))
@@ -47,21 +52,42 @@ class EditorTab:
         tk.Button(ai_toolbar, text="🪄 ขัดเกลา", command=self.ai_improve_text, bg=self.colors["warning"], fg="black", bd=0, padx=10, font=("Segoe UI", 8)).pack(side="left", padx=2)
         tk.Button(ai_toolbar, text="🎬 แนะนำฉาก", command=self.ai_suggest_scene, bg=self.colors["sidebar"], fg=self.colors["text"], bd=0, padx=10, font=("Segoe UI", 8)).pack(side="left", padx=2)
 
-        # Editor
-        self.editor_text = scrolledtext.ScrolledText(card, bg=self.colors["input"], fg=self.colors["text"], font=("Segoe UI", 12), bd=0, wrap=tk.WORD, insertbackground="white", padx=20, pady=20)
+        # Editor with Undo enabled
+        self.editor_text = scrolledtext.ScrolledText(card, bg=self.colors["input"], fg=self.colors["text"], font=("Segoe UI", 12), bd=0, wrap=tk.WORD, insertbackground="white", padx=20, pady=20, undo=True, autoseparators=True)
         self.editor_text.pack(fill="both", expand=True)
+        
+        # Bind keyboard shortcuts
+        self.editor_text.bind("<Control-z>", lambda e: self.undo())
+        self.editor_text.bind("<Control-y>", lambda e: self.redo())
+        self.editor_text.bind("<Control-Shift-Z>", lambda e: self.redo())
         
         # Load first chapter
         if chapters:
             first_key = list(chapters.keys())[0]
             self.chapter_selector.set(first_key)
+            if self.on_chapter_change_cb:
+                self.on_chapter_change_cb(first_key)
             self.editor_text.insert("1.0", chapters.get(first_key, ""))
         
         self.editor_status = tk.Label(card, text="พร้อมใช้งาน", font=("Segoe UI", 8), bg=card["bg"], fg=self.colors["muted"])
         self.editor_status.pack(anchor="e")
 
+    def undo(self):
+        try:
+            self.editor_text.edit_undo()
+        except tk.TclError:
+            pass
+
+    def redo(self):
+        try:
+            self.editor_text.edit_redo()
+        except tk.TclError:
+            pass
+
     def on_chapter_change(self, event):
         name = self.chapter_selector.get()
+        if self.on_chapter_change_cb:
+            self.on_chapter_change_cb(name)
         log_debug(f"Chapter changed to: {name}")
         self.editor_text.delete("1.0", tk.END)
         self.editor_text.insert("1.0", self.dm.data["chapters"].get(name, ""))
