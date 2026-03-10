@@ -173,6 +173,12 @@ class NexusGodWriter:
 
         qa_frame = tk.Frame(self.sidebar, bg=self.colors["sidebar"], pady=10)
         qa_frame.pack(fill="x", padx=10)
+        
+        # Theme Toggle Button
+        theme_text = "☀️ โหมดสว่าง" if self.dm.config.get("theme", "dark") == "dark" else "🌙 โหมดมืด"
+        self.theme_btn = tk.Button(qa_frame, text=theme_text, font=("Segoe UI", 8, "bold"), bg=self.colors["sidebar"], fg=self.colors["muted"], bd=1, relief="solid", pady=8, command=self.toggle_theme)
+        self.theme_btn.pack(fill="x", pady=5)
+        
         tk.Button(qa_frame, text="🎲 เหตุการณ์สุ่ม", font=("Segoe UI", 8, "bold"), bg=self.colors["accent"], fg="black", bd=0, pady=8, command=self.random_event).pack(fill="x", pady=5)
         tk.Button(qa_frame, text="📂 สลับโปรเจกต์", font=("Segoe UI", 8, "bold"), bg=self.colors["muted"], fg="white", bd=0, pady=8, command=self.manage_projects).pack(fill="x", pady=5)
 
@@ -242,10 +248,24 @@ class NexusGodWriter:
         if "world" in update: self.dm.data["world"].update(update["world"])
         if "characters" in update:
             if isinstance(update["characters"], list):
-                for char in update["characters"]: self.dm.data["characters"][char.get("name", "Unknown")] = char
-            else: self.dm.data["characters"].update(update["characters"])
+                for char in update["characters"]:
+                    if isinstance(char, dict):
+                        name = char.get("name", "Unknown")
+                        self.dm.data["characters"][name] = char
+                    elif isinstance(char, str):
+                        if char not in self.dm.data["characters"]:
+                            self.dm.data["characters"][char] = {"name": char, "description": "เพิ่มโดย AI"}
+            else:
+                self.dm.data["characters"].update(update["characters"])
         if "plot" in update: self.dm.data["plot"].update(update["plot"])
         self.dm.save_all()
+
+    def toggle_theme(self):
+        current = self.dm.config.get("theme", "dark")
+        new_theme = "light" if current == "dark" else "dark"
+        self.dm.config["theme"] = new_theme
+        self.dm.save_config()
+        messagebox.showinfo("เปลี่ยนธีม", "กรุณารีสตาร์ทโปรแกรมเพื่อใช้ธีมใหม่")
 
     def random_event(self):
         def task():

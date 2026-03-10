@@ -42,6 +42,7 @@ class EditorTab:
         # Undo/Redo Buttons
         tk.Button(toolbar, text="↩️ เลิกทำ", command=self.undo, bg=self.colors["sidebar"], fg=self.colors["text"], bd=0, padx=10).pack(side="left", padx=2)
         tk.Button(toolbar, text="↪️ ทำซ้ำ", command=self.redo, bg=self.colors["sidebar"], fg=self.colors["text"], bd=0, padx=10).pack(side="left", padx=2)
+        tk.Button(toolbar, text="🔍 ค้นหา", command=self.show_search_dialog, bg=self.colors["sidebar"], fg=self.colors["text"], bd=0, padx=10).pack(side="left", padx=2)
         
         # AI Tools Toolbar
         ai_toolbar = tk.Frame(card, bg=card["bg"])
@@ -55,12 +56,24 @@ class EditorTab:
         # Editor with Undo enabled
         self.editor_text = scrolledtext.ScrolledText(card, bg=self.colors["input"], fg=self.colors["text"], font=("Segoe UI", 12), bd=0, wrap=tk.WORD, insertbackground="white", padx=20, pady=20, undo=True, autoseparators=True)
         self.editor_text.pack(fill="both", expand=True)
+        self.editor_text.bind("<<Modified>>", self.on_text_modified)
         
         # Bind keyboard shortcuts
         self.editor_text.bind("<Control-z>", lambda e: self.undo())
         self.editor_text.bind("<Control-y>", lambda e: self.redo())
         self.editor_text.bind("<Control-Shift-Z>", lambda e: self.redo())
+        self.editor_text.bind("<Control-f>", lambda e: self.show_search_dialog())
         
+        # Bottom bar for stats
+        self.bottom_bar = tk.Frame(card, bg=card["bg"])
+        self.bottom_bar.pack(fill="x", pady=(5, 0))
+        
+        self.stats_label = tk.Label(self.bottom_bar, text="คำ: 0 | ตัวอักษร: 0", font=("Segoe UI", 8), bg=card["bg"], fg=self.colors["muted"])
+        self.stats_label.pack(side="left")
+        
+        self.editor_status = tk.Label(self.bottom_bar, text="พร้อมใช้งาน", font=("Segoe UI", 8), bg=card["bg"], fg=self.colors["muted"])
+        self.editor_status.pack(side="right")
+
         # Load first chapter
         if chapters:
             first_key = list(chapters.keys())[0]
@@ -68,9 +81,7 @@ class EditorTab:
             if self.on_chapter_change_cb:
                 self.on_chapter_change_cb(first_key)
             self.editor_text.insert("1.0", chapters.get(first_key, ""))
-        
-        self.editor_status = tk.Label(card, text="พร้อมใช้งาน", font=("Segoe UI", 8), bg=card["bg"], fg=self.colors["muted"])
-        self.editor_status.pack(anchor="e")
+            self.update_stats()
 
     def undo(self):
         try:
@@ -91,6 +102,66 @@ class EditorTab:
         log_debug(f"Chapter changed to: {name}")
         self.editor_text.delete("1.0", tk.END)
         self.editor_text.insert("1.0", self.dm.data["chapters"].get(name, ""))
+        self.update_stats()
+
+    def on_text_modified(self, event):
+        if self.editor_text.edit_modified():
+            self.update_stats()
+            self.editor_text.edit_modified(False)
+
+    def update_stats(self):
+        content = self.editor_text.get("1.0", tk.END).strip()
+        char_count = len(content)
+        # Simple word count for Thai/English mix
+        import re
+        words = re.findall(r'\w+', content)
+        word_count = len(words)
+        self.stats_label.config(text=f"คำ: {word_count} | ตัวอักษร: {char_count}")
+
+    def show_search_dialog(self):
+        dialog = tk.Toplevel(self.parent)
+        dialog.title("ค้นหาและแทนที่")
+        dialog.geometry("400x200")
+        dialog.configure(bg=self.colors["sidebar"])
+        dialog.transient(self.parent)
+        
+        tk.Label(dialog, text="ค้นหา:", bg=self.colors["sidebar"], fg=self.colors["text"]).grid(row=0, column=0, padx=10, pady=10, sticky="e")
+        search_ent = tk.Entry(dialog, bg=self.colors["input"], fg=self.colors["text"], insertbackground="white")
+        search_ent.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+        
+        tk.Label(dialog, text="แทนที่ด้วย:", bg=self.colors["sidebar"], fg=self.colors["text"]).grid(row=1, column=0, padx=10, pady=10, sticky="e")
+        replace_ent = tk.Entry(dialog, bg=self.colors["input"], fg=self.colors["text"], insertbackground="white")
+        replace_ent.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+        
+        def find():
+            word = search_ent.get()
+            self.editor_text.tag_remove('match', '1.0', tk.END)
+            if word:
+                idx = '1.0'
+                while True:
+                    idx = self.editor_text.search(word, idx, nocase=1, stopindex=tk.END)
+                    if not idx: break
+                    lastidx = '%s+%dc' % (idx, len(word))
+                    self.editor_text.tag_add('match', idx, lastidx)
+                    idx = lastidx
+                self.editor_text.tag_config('match', foreground='black', background='yellow')
+        
+        def replace():
+            word = search_ent.get()
+            repl = replace_ent.get()
+            content = self.editor_text.get("1.0", tk.END)
+            new_content = content.replace(word, repl)
+            self.editor_text.delete("1.0", tk.END)
+            self.editor_text.insert("1.0", new_content)
+            self.update_stats()
+
+        btn_f = tk.Frame(dialog, bg=self.colors["sidebar"])
+        btn_f.grid(row=2, column=0, columnspan=2, pady=20)
+        
+        tk.Button(btn_f, text="ค้นหา", command=find, bg=self.colors["accent"], fg="black", bd=0, padx=10).pack(side="left", padx=5)
+        tk.Button(btn_f, text="แทนที่ทั้งหมด", command=replace, bg=self.colors["warning"], fg="black", bd=0, padx=10).pack(side="left", padx=5)
+        
+        dialog.columnconfigure(1, weight=1)
 
     def add_chapter(self):
         num = len(self.dm.data["chapters"]) + 1
